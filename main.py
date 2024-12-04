@@ -12,8 +12,6 @@ from sklearn.cluster import KMeans
 st.set_page_config(page_title="Dashboard", layout="wide")
 
 # Database connection function
-import streamlit as st
-import psycopg
 
 def get_data(query):
     # Access secrets from the secrets.toml file
