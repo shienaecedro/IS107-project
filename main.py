@@ -13,6 +13,10 @@ st.set_page_config(page_title="Dashboard", layout="wide")
 
 # Database connection function
 
+import psycopg2
+import pandas as pd
+import streamlit as st
+
 def get_data(query):
     # Access secrets from the secrets.toml file
     db_host = st.secrets["DB_HOST"]
@@ -21,11 +25,27 @@ def get_data(query):
     db_user = st.secrets["DB_USER"]
     db_password = st.secrets["DB_PASSWORD"]
 
-    with psycopg.connect(
-        f"host={db_host} port={db_port} dbname={db_name} user={db_user} password={db_password}"
-    ) as conn:
+    # Establish the connection using psycopg2
+    try:
+        conn = psycopg2.connect(
+            host=db_host,
+            port=db_port,
+            dbname=db_name,
+            user=db_user,
+            password=db_password
+        )
+        # Use pandas to execute the query and fetch data
         df = pd.read_sql(query, conn)
+    except Exception as e:
+        st.error(f"Error connecting to the database: {e}")
+        return None
+    finally:
+        # Make sure the connection is closed
+        if conn:
+            conn.close()
+    
     return df
+
 
 
 ### Key Metrics ###
