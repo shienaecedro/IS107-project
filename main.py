@@ -12,17 +12,23 @@ from sklearn.cluster import KMeans
 st.set_page_config(page_title="Dashboard", layout="wide")
 
 # Database connection function
+import streamlit as st
+import psycopg
+
 def get_data(query):
-    connection = psycopg2.connect(
-        host="localhost",
-        port="5433",
-        database="online_retail_store",
-        user="postgres",
-        password="admin"
-    )
-    df = pd.read_sql(query, connection)
-    connection.close()
+    # Access secrets from the secrets.toml file
+    db_host = st.secrets["DB_HOST"]
+    db_port = st.secrets["DB_PORT"]
+    db_name = st.secrets["DB_NAME"]
+    db_user = st.secrets["DB_USER"]
+    db_password = st.secrets["DB_PASSWORD"]
+
+    with psycopg.connect(
+        f"host={db_host} port={db_port} dbname={db_name} user={db_user} password={db_password}"
+    ) as conn:
+        df = pd.read_sql(query, conn)
     return df
+
 
 ### Key Metrics ###
 

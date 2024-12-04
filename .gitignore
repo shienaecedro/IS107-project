@@ -1,0 +1,13 @@
+# Exclude the .streamlit folder
+.streamlit/
+
+# Exclude virtual environments
+venv/
+
+# Python-specific exclusions
+__pycache__/
+*.pyc
+*.pyo
+
+# Other files to ignore
+.DS_Store
