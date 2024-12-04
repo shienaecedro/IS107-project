@@ -1,22 +1,27 @@
 import streamlit as st
 import pandas as pd
-from sqlalchemy import create_engine
+import psycopg2
 from datetime import datetime, timedelta
 import plotly.express as px
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LinearRegression
-from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_error
 from sklearn.cluster import KMeans
 
 # Set the page configuration to wide mode
 st.set_page_config(page_title="Dashboard", layout="wide")
 
-# Database connection function using SQLAlchemy
+# Database connection function
 def get_data(query):
-    engine = create_engine('postgresql+psycopg2://postgres:admin@localhost:5433/online_retail_store')
-    df = pd.read_sql(query, engine)
-    engine.dispose()
+    connection = psycopg2.connect(
+        host="localhost",
+        port="5433",
+        database="online_retail_store",
+        user="postgres",
+        password="admin"
+    )
+    df = pd.read_sql(query, connection)
+    connection.close()
     return df
 
 ### Key Metrics ###
