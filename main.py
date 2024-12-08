@@ -21,6 +21,7 @@ def get_data(query):
     db_user = st.secrets["DB_USER"]
     db_password = st.secrets["DB_PASSWORD"]
     
+    conn = None
     try:
         conn = psycopg2.connect(
             host=db_host,
@@ -205,10 +206,6 @@ def sales_forecast(start_date_str, end_date_str):
 
     else:
         st.warning("Not enough data to split into training and test sets.")
-
-
-
-
 
 def customer_segmentation(start_date_str, end_date_str):
     query_customer = f"""
