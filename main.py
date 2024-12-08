@@ -12,7 +12,7 @@ from sklearn.cluster import KMeans
 st.set_page_config(page_title="Dashboard", layout="wide")
 
 # Database connection function
-"""""
+
 def get_data(query):
     # Access secrets from the secrets.toml file
     db_host = st.secrets["DB_HOST"]
@@ -41,9 +41,6 @@ def get_data(query):
             conn.close()
     
     return df
-"""""
-
-
 
 ### Key Metrics ###
 
