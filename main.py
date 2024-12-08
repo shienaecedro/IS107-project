@@ -21,7 +21,6 @@ def get_data(query):
     db_user = st.secrets["DB_USER"]
     db_password = st.secrets["DB_PASSWORD"]
     
-    conn = st.connection("postgresql", type="sql")
     try:
         conn = psycopg2.connect(
             host=db_host,
