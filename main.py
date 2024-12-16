@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from sqlalchemy import create_engine
+import psycopg2
 from datetime import datetime, timedelta
 import plotly.express as px
 from sklearn.model_selection import train_test_split
@@ -12,9 +12,31 @@ from sklearn.cluster import KMeans
 st.set_page_config(page_title="Dashboard", layout="wide")
 
 def get_data(query):
-    engine = create_engine('postgresql+psycopg2://postgres:admin@localhost:5433/online_retail_store')
-    df = pd.read_sql(query, engine)
-    engine.dispose()
+    # Access secrets from the secrets.toml file
+    db_host = st.secrets["DB_HOST"]
+    db_port = st.secrets["DB_PORT"]
+    db_name = st.secrets["DB_NAME"]
+    db_user = st.secrets["DB_USER"]
+    db_password = st.secrets["DB_PASSWORD"]
+    
+    try:
+        conn = psycopg2.connect(
+            host=db_host,
+            port=db_port,
+            dbname=db_name,
+            user=db_user,
+            password=db_password
+        )
+
+        df = pd.read_sql(query, conn)
+    except Exception as e:
+        st.error(f"Error connecting to the database: {e}")
+        return None
+    finally:
+        # Make sure the connection is closed
+        if conn:
+            conn.close()
+    
     return df
 
 ### Key Metrics ###
