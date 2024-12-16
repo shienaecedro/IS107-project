@@ -1,44 +1,20 @@
 import streamlit as st
 import pandas as pd
-import psycopg2
+from sqlalchemy import create_engine
 from datetime import datetime, timedelta
 import plotly.express as px
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LinearRegression
+# from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_error
 from sklearn.cluster import KMeans
 
-# Set the page configuration to wide mode
 st.set_page_config(page_title="Dashboard", layout="wide")
 
-# Database connection function
-
 def get_data(query):
-    # Access secrets from the secrets.toml file
-    db_host = st.secrets["DB_HOST"]
-    db_port = st.secrets["DB_PORT"]
-    db_name = st.secrets["DB_NAME"]
-    db_user = st.secrets["DB_USER"]
-    db_password = st.secrets["DB_PASSWORD"]
-    
-    try:
-        conn = psycopg2.connect(
-            host=db_host,
-            port=db_port,
-            dbname=db_name,
-            user=db_user,
-            password=db_password
-        )
-
-        df = pd.read_sql(query, conn)
-    except Exception as e:
-        st.error(f"Error connecting to the database: {e}")
-        return None
-    finally:
-        # Make sure the connection is closed
-        if conn:
-            conn.close()
-    
+    engine = create_engine('postgresql+psycopg2://postgres:admin@localhost:5433/online_retail_store')
+    df = pd.read_sql(query, engine)
+    engine.dispose()
     return df
 
 ### Key Metrics ###
@@ -145,13 +121,6 @@ def  top_selling_products(start_date_str, end_date_str):
 
 ### Data Mining ###
 
-import pandas as pd
-from sklearn.model_selection import train_test_split
-from sklearn.linear_model import LinearRegression
-import plotly.express as px
-import streamlit as st
-from datetime import timedelta
-
 def sales_forecast(start_date_str, end_date_str):
     query_sales = f"""
     SELECT i.invoice_date, SUM(p.unit_price * i.quantity) AS sales
@@ -191,7 +160,6 @@ def sales_forecast(start_date_str, end_date_str):
         results_df = pd.DataFrame({'Invoice Date': X_test['date_ordinal'].map(pd.Timestamp.fromordinal), 'Actual': y_test, 'Predicted': y_pred})
         results_df = results_df.sort_values(by='Invoice Date')
 
-        # Plot the actual vs predicted sales using Streamlit and Plotly
         fig = px.scatter(results_df, x='Invoice Date', y='Actual', labels={'Invoice Date': 'Date', 'Actual': 'Sales'})
         fig.add_scatter(x=results_df['Invoice Date'], y=results_df['Predicted'], mode='lines', name='Predicted')
         st.plotly_chart(fig)
