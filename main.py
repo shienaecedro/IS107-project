@@ -1,6 +1,7 @@
 import streamlit as st
+import numpy as np
 import pandas as pd
-import psycopg2
+from sqlalchemy import create_engine
 from datetime import datetime, timedelta
 import plotly.express as px
 from sklearn.model_selection import train_test_split
@@ -12,31 +13,9 @@ from sklearn.cluster import KMeans
 st.set_page_config(page_title="Dashboard", layout="wide")
 
 def get_data(query):
-    # Access secrets from the secrets.toml file
-    db_host = st.secrets["DB_HOST"]
-    db_port = st.secrets["DB_PORT"]
-    db_name = st.secrets["DB_NAME"]
-    db_user = st.secrets["DB_USER"]
-    db_password = st.secrets["DB_PASSWORD"]
-    
-    try:
-        conn = psycopg2.connect(
-            host=db_host,
-            port=db_port,
-            dbname=db_name,
-            user=db_user,
-            password=db_password
-        )
-
-        df = pd.read_sql(query, conn)
-    except Exception as e:
-        st.error(f"Error connecting to the database: {e}")
-        return None
-    finally:
-        # Make sure the connection is closed
-        if conn:
-            conn.close()
-    
+    engine = create_engine('postgresql://postgres:admin@localhost:5433/online_retail_store')
+    df = pd.read_sql(query, engine)
+    engine.dispose()
     return df
 
 ### Key Metrics ###
@@ -101,8 +80,7 @@ def sales_trend(start_date_str, end_date_str):
 
     if not data_sales_trend.empty:
         st.line_chart(data_sales_trend.set_index('invoice_date')['sales'])
-        
-        st.write("**INSIGHTS**")
+
         st.write(f"The **AVERAGE TOTAL SALES** from {start_date_fmt} to {end_date_fmt} in {year_fmt} is **${average_total_sales:.2f}**.")
         if highest_sales_day:
             st.write(f"**{highest_sales_day}** appears most frequently as the highest sales day with an average sales of **${highest_sales_day_value:.2f}**.")
@@ -132,8 +110,6 @@ def  top_selling_products(start_date_str, end_date_str):
 
         fig_top_products = px.bar(data_top_products, x='description', y='total_sales', labels={'description': 'Products', 'total_sales': 'Total Sales'})
         st.plotly_chart(fig_top_products)
-
-        st.write("**INSIGHTS**")
         st.write(f"""{top_product} significantly outperforms other products with sales reaching **${top_sales:,.2f}**, indicating its popularity and potential for high returns.""")
 
         if not seasonal_products.empty:
@@ -143,58 +119,69 @@ def  top_selling_products(start_date_str, end_date_str):
 
 ### Data Mining ###
 
-def sales_forecast(start_date_str, end_date_str):
+def predict_popular_product(start_date_str, end_date_str):
     query_sales = f"""
-    SELECT i.invoice_date, SUM(p.unit_price * i.quantity) AS sales
+    SELECT i.invoice_date, p.description, SUM(i.quantity) AS total_quantity
     FROM invoices i
     JOIN products p ON i.stock_code = p.stock_code
     WHERE i.invoice_date BETWEEN '{start_date_str}' AND '{end_date_str}'
-    GROUP BY i.invoice_date
-    ORDER BY i.invoice_date;
+    GROUP BY i.invoice_date, p.description
+    ORDER BY i.invoice_date, p.description;
     """
-    sales_data = get_data(query_sales)  # Fetch data based on the query
+    sales_data = get_data(query_sales)
     if sales_data.empty:
         st.warning("No data available for the selected date range.")
         return
 
-    # Convert invoice_date to datetime format
+    # Prepare data for linear regression
     sales_data['invoice_date'] = pd.to_datetime(sales_data['invoice_date'])
+    sales_data['days'] = (sales_data['invoice_date'] - sales_data['invoice_date'].min()).dt.days
 
-    # Use the ordinal form of the date for the regression
-    sales_data['date_ordinal'] = sales_data['invoice_date'].map(pd.Timestamp.toordinal)
-
-    # Define features and target
-    X = sales_data[['date_ordinal']]
-    y = sales_data['sales']
-
-    if len(X) > 1:
-        # Split data into training and test sets
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    product_forecasts = {}
+    products = sales_data['description'].unique()
     
-        # Build and train the Linear Regression model
-        linear_model = LinearRegression()
-        linear_model.fit(X_train, y_train)
+    forecast_dfs = []
     
-        # Make predictions
-        y_pred = linear_model.predict(X_test)
-
-        # Create a DataFrame for actual vs predicted sales
-        results_df = pd.DataFrame({'Invoice Date': X_test['date_ordinal'].map(pd.Timestamp.fromordinal), 'Actual': y_test, 'Predicted': y_pred})
-        results_df = results_df.sort_values(by='Invoice Date')
-
-        fig = px.scatter(results_df, x='Invoice Date', y='Actual', labels={'Invoice Date': 'Date', 'Actual': 'Sales'})
-        fig.add_scatter(x=results_df['Invoice Date'], y=results_df['Predicted'], mode='lines', name='Predicted')
-        st.plotly_chart(fig)
-
-        # Predict sales for the next month
-        next_month_date = pd.to_datetime(end_date_str) + timedelta(days=30)
-        future_data = pd.DataFrame({'date_ordinal': [next_month_date.toordinal()]})
+    for product in products:
+        product_data = sales_data[sales_data['description'] == product]
+        X = product_data[['days']]
+        y = product_data['total_quantity']
+        
+        # Create and fit the linear regression model
+        model = LinearRegression()
+        model.fit(X, y)
+        
+        # Forecast for the next 30 days
+        forecast_days = pd.DataFrame(np.arange(X['days'].max() + 1, X['days'].max() + 31), columns=['days'])
+        forecast_quantity = model.predict(forecast_days)
+        
+        # Create forecast dates
+        forecast_dates = pd.date_range(start=product_data['invoice_date'].iloc[-1] + pd.Timedelta(days=1), periods=30)
+        
+        # Create DataFrame for forecast
+        forecast_df = pd.DataFrame({'invoice_date': forecast_dates, 'total_quantity': forecast_quantity, 'description': product})
+        forecast_dfs.append(forecast_df)
+        
+        # Sum forecast quantity for the next month
+        total_forecast_quantity = forecast_quantity.sum()
+        product_forecasts[product] = total_forecast_quantity
     
-        # Predict sales for next month
-        predicted_sales = linear_model.predict(future_data)
+    # Find the most popular product
+    popular_product = max(product_forecasts, key=product_forecasts.get)
 
-    else:
-        st.warning("Not enough data to split into training and test sets.")
+    # Combine actual sales and forecast data
+    combined_forecast_df = pd.concat(forecast_dfs, ignore_index=True)
+    combined_data = pd.concat([sales_data[['invoice_date', 'total_quantity', 'description']], combined_forecast_df], ignore_index=True)
+    
+    # Filter top N products by total sales quantity
+    top_n = 5 
+    top_products = sales_data.groupby('description')['total_quantity'].sum().nlargest(top_n).index
+    filtered_data = combined_data[combined_data['description'].isin(top_products)]
+    
+    # Plot the sales and forecast using Plotly Express
+    fig = px.line(filtered_data, x='invoice_date', y='total_quantity', color='description', labels={'total_quantity': 'Total Quantity', 'invoice_date': 'Date'})
+    st.plotly_chart(fig)
+    st.write(f"Most popular product for the next month is {popular_product}")
 
 def customer_segmentation(start_date_str, end_date_str):
     query_customer = f"""
@@ -208,45 +195,26 @@ def customer_segmentation(start_date_str, end_date_str):
     customer_data = get_data(query_customer)
 
     if not customer_data.empty:
-        # Calculate average spending per purchase for each customer
-        customer_data['average_spending'] = customer_data['total_spending'] / customer_data['purchase_frequency']
-
-        # Define thresholds for low, medium, and high-value purchases
-        low_value_threshold = 50
-        high_value_threshold = 200
-
-        # Categorize customers
-        customer_data['value_category'] = pd.cut(customer_data['average_spending'],
-                                                 bins=[-float('inf'), low_value_threshold, high_value_threshold, float('inf')],
-                                                 labels=['Low Value', 'Medium Value', 'High Value'])
-
-        # Count customers in each category
-        value_counts = customer_data['value_category'].value_counts()
-        low_value_customers_count = value_counts.get('Low Value', 0)
-        medium_value_customers_count = value_counts.get('Medium Value', 0)
-        high_value_customers_count = value_counts.get('High Value', 0)
-
         # Preprocess data for clustering
+        # Standardize data
         scaler = StandardScaler()
         scaled_data = scaler.fit_transform(customer_data[['purchase_frequency', 'total_spending']])
 
         # Apply K-Means clustering
+        # Randomly select 3 clusters
         kmeans = KMeans(n_clusters=3, random_state=42)
+        # Calculate distance
         kmeans.fit(scaled_data)
+        #Assign cluster labes
         customer_data['cluster'] = kmeans.labels_
 
         # Visualize the clusters
         fig_clusters = px.scatter(customer_data, x='purchase_frequency', y='total_spending', color='cluster', labels={'total_spending': 'Total Spending', 'purchase_frequency': 'Purchase Frequency'})
         st.plotly_chart(fig_clusters)
-
-        # Display insights
-        st.write("**INSIGHTS**")
-        st.write(f"{low_value_customers_count} customers with spending below ${low_value_threshold} per purchase are categorized as **Low Value Customers** customers.")
-        st.write(f"{medium_value_customers_count} customers spending between ${low_value_threshold} and ${high_value_threshold} per purchase are categorized as **Medium Value** customers.")
-        st.write(f"{high_value_customers_count} customers spending above ${high_value_threshold} per purchase are categorized as **High Value** customers.")
     else:
         st.warning("No data available for customer segmentation.")
-# Main app code
+        
+# Main
 def main():
     st.title('Dashboard')
 
@@ -306,8 +274,8 @@ def main():
             sales_trend(start_date_str, end_date_str)
 
         with col4:
-            st.header('Sales Forecast')
-            sales_forecast(start_date_str, end_date)
+            st.header('Top Product Forecast')
+            predict_popular_product(start_date_str, end_date)
 
         ### Top-Selling Products and Customer Segmentation ###
         col5, col6 = st.columns(2)
