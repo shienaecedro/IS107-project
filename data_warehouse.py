@@ -3,7 +3,7 @@ from sqlalchemy import create_engine, Table, Column, Integer, String, DECIMAL, T
 from sqlalchemy.dialects.postgresql import insert
 
 # Database connection
-DATABASE_URI = 'postgresql://postgres:admin@localhost:5433/online_retail_store'
+DATABASE_URI = "postgresql+psycopg2://postgres:admin@localhost:5433/online_retail_store"
 engine = create_engine(DATABASE_URI)
 metadata = MetaData()
 
