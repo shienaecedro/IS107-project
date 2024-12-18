@@ -7,13 +7,14 @@ import plotly.express as px
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LinearRegression
-# from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_error
 from sklearn.cluster import KMeans
 
 st.set_page_config(page_title="Dashboard", layout="wide")
 
 def get_data(query):
-    engine = create_engine('postgresql://postgres:admin@localhost:5433/online_retail_store')
+    # Access the database URL from the secrets
+    database_url = st.secrets["database"]["DATABASE_URL"]
+    engine = create_engine(database_url)
     df = pd.read_sql(query, engine)
     engine.dispose()
     return df
