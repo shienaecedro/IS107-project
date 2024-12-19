@@ -180,7 +180,7 @@ def predict_popular_product(start_date_str, end_date_str):
     filtered_data = combined_data[combined_data['description'].isin(top_products)]
     
     # Plot the sales and forecast using Plotly Express
-    fig = px.line(filtered_data, x='invoice_date', y='total_quantity', color='description', labels={'total_quantity': 'Total Quantity', 'invoice_date': 'Date'})
+    fig = px.scatter(filtered_data, x='invoice_date', y='total_quantity', color='description', labels={'total_quantity': 'Total Quantity', 'invoice_date': 'Date'})
     st.plotly_chart(fig)
     st.write(f"Most popular product for the next month is {popular_product}")
 
